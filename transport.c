@@ -39,6 +39,8 @@ static void generate_initial_seq_num(context_t *ctx);
 static void control_loop(mysocket_t sd, context_t *ctx);
 
 
+void cleanup(context_t *ctx);
+
 /* initialise the transport layer, and start the main loop, handling
  * any data from the peer or the application.  this function should not
  * return until the connection is closed.
@@ -53,7 +55,32 @@ void transport_init(mysocket_t sd, bool_t is_active)
     generate_initial_seq_num(ctx);
 
     /* XXX: you should send a SYN packet here if is_active, or wait for one
-     * to arrive if !is_active.  after the handshake completes, unblock the
+     * to arrive if !is_active.
+     *
+     * TCP Handshake initialize
+     */
+
+    if (is_active) {
+        if (stcp_network_send(sd, NULL, 0, 0) < 0) {
+            errno = ECONNREFUSED;
+            stcp_unblock_application(sd);
+            cleanup(ctx);
+            return;
+        }
+    } else {
+        unsigned int wait_for_syn = stcp_wait_for_event(sd, NETWORK_DATA, NULL);
+        if (wait_for_syn & NETWORK_DATA) {
+            char buf[STCP_MSS];
+            stcp_network_recv(sd, buf, STCP_MSS);
+        } else {
+            errno = ETIMEDOUT;
+            stcp_unblock_application(sd);
+            cleanup(ctx);
+            return;
+        }
+    }
+
+     /* after the handshake completes, unblock the
      * application with stcp_unblock_application(sd).  you may also use
      * this to communicate an error condition back to the application, e.g.
      * if connection fails; to do so, just set errno appropriately (e.g. to
@@ -65,6 +92,10 @@ void transport_init(mysocket_t sd, bool_t is_active)
     control_loop(sd, ctx);
 
     /* do any cleanup here */
+    cleanup(ctx);
+}
+
+void cleanup(context_t *ctx) {
     free(ctx);
 }
 
@@ -93,7 +124,7 @@ static void control_loop(mysocket_t sd, context_t *ctx)
         unsigned int event;
 
         /* see stcp_api.h or stcp_api.c for details of this function */
-        /* XXX: you will need to change some of these arguments! */
+        /* TODO: you will need to change some of these arguments! */
         event = stcp_wait_for_event(sd, 0, NULL);
 
         /* check whether it was the network, app, or a close request */
