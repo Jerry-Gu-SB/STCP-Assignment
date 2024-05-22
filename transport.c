@@ -50,6 +50,14 @@ void cleanup(context_t *ctx);
  * any data from the peer or the application.  this function should not
  * return until the connection is closed.
  */
+
+
+void server_send_syn(mysocket_t sd, context_t *ctx);
+void server_receive_syn(mysocket_t sd, context_t *ctx);
+
+void application_receive_data(mysocket_t sd, context_t *ctx);
+void application_send_data(mysocket_t sd, context_t *ctx);
+
 void transport_init(mysocket_t sd, bool_t is_active)
 {
     context_t *ctx;
@@ -65,24 +73,11 @@ void transport_init(mysocket_t sd, bool_t is_active)
      * TCP Handshake initialize
      */
 
+    // 3 way TCP handshake
     if (is_active) {
-        if (stcp_network_send(sd, NULL, 0, 0) < 0) {
-            errno = ECONNREFUSED;
-            stcp_unblock_application(sd);
-            cleanup(ctx);
-            return;
-        }
+        server_send_syn(sd, ctx);
     } else {
-        unsigned int wait_for_syn = stcp_wait_for_event(sd, NETWORK_DATA, NULL);
-        if (wait_for_syn & NETWORK_DATA) {
-            char buf[STCP_MSS];
-            stcp_network_recv(sd, buf, STCP_MSS);
-        } else {
-            errno = ETIMEDOUT;
-            stcp_unblock_application(sd);
-            cleanup(ctx);
-            return;
-        }
+        server_receive_syn(sd, ctx);
     }
 
      /* after the handshake completes, unblock the
@@ -101,6 +96,36 @@ void transport_init(mysocket_t sd, bool_t is_active)
     
     /* do any cleanup here */
     cleanup(ctx);
+}
+
+void server_send_syn(mysocket_t sd, context_t *ctx) {
+    // create a SYN packet
+
+    if (stcp_network_send(sd, NULL, 0, 0) < 0) {
+        errno = ECONNREFUSED;
+        stcp_unblock_application(sd);
+        cleanup(ctx);
+        fprintf(stderr, "Server failed to send SYN packet\n");
+        exit(-1);
+    }
+}
+
+void server_receive_syn(mysocket_t sd, context_t *ctx) {
+    struct timespec timeout;
+    unsigned int event;
+    clock_gettime(CLOCK_REALTIME, &timeout); // get current time
+    timeout.tv_sec += 1; // add 1 second to the current time
+    event = stcp_wait_for_event(sd, NETWORK_DATA, &timeout);
+    if (event & NETWORK_DATA) {
+        char buf[STCP_MSS];
+        stcp_network_recv(sd, buf, STCP_MSS);
+    } else {
+        errno = ETIMEDOUT;
+        stcp_unblock_application(sd);
+        cleanup(ctx);
+        fprintf(stderr, "Server failed to receive SYN packet\n");
+        exit(-1);
+    }
 }
 
 void cleanup(context_t *ctx) {
