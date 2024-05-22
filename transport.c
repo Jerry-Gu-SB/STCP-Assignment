@@ -7,6 +7,11 @@
  * mysocket and network layers. You are required to fill in the STCP
  * functionality in this file. 
  *
+ * For testing connection setup and teardown only, run server first in one terminal.
+    $ ./server (or ./server -U for the unreliable network mode)
+    Server's address is kyoungsoo-PC:42737
+    Then, in another terminal on the same machine,
+    $ ./client localhost:42737 (or ./client localhost:42737 -U for the unreliable network mode) client>
  */
 
 
@@ -91,6 +96,9 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
     control_loop(sd, ctx);
 
+
+    // TODO: connection teardown
+    
     /* do any cleanup here */
     cleanup(ctx);
 }

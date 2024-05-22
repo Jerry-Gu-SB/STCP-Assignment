@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6"/>
+	<Project>
+		<Option title="STCP_Assignment"/>
+		<Option makefile_is_custom="1"/>
+		<Option compiler="gcc"/>
+		<Option virtualFolders="CMake Files\;"/>
+		<Build>
+			<Target title="all">
+				<Option working_dir="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/cmake-build-debug"/>
+				<Option type="4"/>
+				<MakeCommands>
+					<Build command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 all"/>
+					<CompileFile command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="STCP_Assignment">
+				<Option output="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/cmake-build-debug/STCP_Assignment" prefix_auto="0" extension_auto="0"/>
+				<Option working_dir="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/cmake-build-debug"/>
+				<Option object_output="./"/>
+				<Option type="1"/>
+				<Option compiler="gcc"/>
+				<Compiler>
+					<Add directory="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/."/>
+					<Add directory="/usr/lib/gcc/x86_64-linux-gnu/11/include"/>
+					<Add directory="/usr/local/include"/>
+					<Add directory="/usr/include/x86_64-linux-gnu"/>
+					<Add directory="/usr/include"/>
+				</Compiler>
+				<MakeCommands>
+					<Build command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 STCP_Assignment"/>
+					<CompileFile command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="STCP_Assignment/fast">
+				<Option output="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/cmake-build-debug/STCP_Assignment" prefix_auto="0" extension_auto="0"/>
+				<Option working_dir="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/cmake-build-debug"/>
+				<Option object_output="./"/>
+				<Option type="1"/>
+				<Option compiler="gcc"/>
+				<Compiler>
+					<Add directory="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/."/>
+					<Add directory="/usr/lib/gcc/x86_64-linux-gnu/11/include"/>
+					<Add directory="/usr/local/include"/>
+					<Add directory="/usr/include/x86_64-linux-gnu"/>
+					<Add directory="/usr/include"/>
+				</Compiler>
+				<MakeCommands>
+					<Build command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 STCP_Assignment/fast"/>
+					<CompileFile command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="edit_cache">
+				<Option working_dir="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/cmake-build-debug"/>
+				<Option type="4"/>
+				<MakeCommands>
+					<Build command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 edit_cache"/>
+					<CompileFile command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="rebuild_cache">
+				<Option working_dir="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/cmake-build-debug"/>
+				<Option type="4"/>
+				<MakeCommands>
+					<Build command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 rebuild_cache"/>
+					<CompileFile command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/gmake -j8 -f &quot;/mnt/d/Documents/Year-3/Computer\ Networks/STCP-Assignment/cmake-build-debug/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+		</Build>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/client.c">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/connection_demux.c">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/connection_demux.h">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/mysock.c">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/mysock.h">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/mysock_api.c">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/mysock_hash.h">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/mysock_impl.h">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/network.c">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/network.h">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/network_io.c">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/network_io.h">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/network_io_socket.c">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/network_io_socket.h">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/network_io_tcp.c">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/server.c">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/stcp_api.c">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/stcp_api.h">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/tcp_sum.c">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/tcp_sum.h">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/transport.c">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/transport.h">
+			<Option target="STCP_Assignment"/>
+		</Unit>
+		<Unit filename="/mnt/d/Documents/Year-3/Computer Networks/STCP-Assignment/CMakeLists.txt">
+			<Option virtualFolder="CMake Files\"/>
+		</Unit>
+	</Project>
+</CodeBlocks_project_file>
