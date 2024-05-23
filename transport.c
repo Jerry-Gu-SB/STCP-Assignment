@@ -82,7 +82,46 @@ void transport_init(mysocket_t sd, bool_t is_active)
      */
 
     // 3 way TCP handshake
+    if (is_active) {
+        // Active open
+        // Send SYN
+//        struct tcphdr *syn_packet = (struct tcphdr *) calloc(1, sizeof(struct tcphdr));
+//        syn_packet->th_flags = TH_SYN;  // syn packet
+//        syn_packet->th_seq = ctx->initial_sequence_num;
+//        syn_packet->th_off = 5;
+//        syn_packet->th_win = 3072;
+//        stcp_network_send(sd, &syn_packet, sizeof(*syn_packet), NULL);
+        struct tcphdr syn_packet;
+        memset(&syn_packet, 0, sizeof(syn_packet));
+        syn_packet.th_flags = TH_SYN;
+        syn_packet.th_seq = ctx->initial_sequence_num;
+        syn_packet.th_off = 5;
+        syn_packet.th_win = 3072;
+        stcp_network_send(sd, &syn_packet, sizeof(syn_packet), NULL);
 
+        ctx->connection_state = CSTATE_SYN_SENT;
+
+
+        struct tcphdr syn_ack_packet;
+        stcp_wait_for_event(sd, NETWORK_DATA, NULL);
+        stcp_network_recv(sd, &syn_ack_packet, sizeof(syn_ack_packet));
+
+        if (syn_ack_packet.th_flags == (TH_SYN | TH_ACK))
+        {
+            struct tcphdr ack_packet;
+            memset(&ack_packet, 0, sizeof(ack_packet));
+            ack_packet.th_flags = TH_ACK;
+            ack_packet.th_seq = ctx->initial_sequence_num + 1;
+            ack_packet.th_ack = syn_ack_packet.th_seq + 1;
+            ack_packet.th_off = 5;  // Header length (5 * 32-bit words = 20 bytes)
+            ack_packet.th_win = 3072;  // Window size
+            stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
+
+            ctx->recv_base = syn_ack_packet.th_seq + 1;
+            ctx->expected_seq_num = ctx->recv_base;
+
+            ctx->connection_state = CSTATE_ESTABLISHED;
+        }
 
      /* after the handshake completes, unblock the
      * application with stcp_unblock_application(sd).  you may also use
