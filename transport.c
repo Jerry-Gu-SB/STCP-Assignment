@@ -216,10 +216,11 @@ void connection_refused(context_t *ctx) {
     ctx->done = TRUE;
     ctx->connection_state = CSTATE_CLOSED;
     errno = ECONNREFUSED;
-    free(ctx);
+
     fprintf(stderr, "Connection refused\n");
     // honestly i'm not sure if we need to exit in this case, i don't think so
-    //    exit(-1);
+//    free(ctx);
+//    exit(-1);
 }
 
 /* generate initial sequence number for an STCP connection */
