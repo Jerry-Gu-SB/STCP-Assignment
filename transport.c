@@ -145,6 +145,25 @@ void transport_init(mysocket_t sd, bool_t is_active)
             stcp_network_send(sd, &syn_ack_packet, sizeof(syn_ack_packet), NULL);
 
             ctx->connection_state = CSTATE_SYN_RECEIVED;
+
+            struct tcphdr ack_packet;
+            stcp_wait_for_event(sd, NETWORK_DATA, NULL);
+            stcp_network_recv(sd, &ack_packet, sizeof(ack_packet));
+
+            if (ack_packet.th_flags == TH_ACK && ack_packet.th_ack == syn_ack_packet.th_seq + 1) {
+                ctx->recv_base = syn_packet.th_seq + 1;
+                ctx->expected_seq_num = ctx->recv_base;
+
+                ctx->connection_state = CSTATE_ESTABLISHED;
+            } else {
+                errno = ECONNREFUSED;
+                free(ctx);
+                return;
+            }
+        } else {
+            errno = ECONNREFUSED;
+            free(ctx);
+            return;
         }
     }
      /* after the handshake completes, unblock the
