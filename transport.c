@@ -115,9 +115,8 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
 
     int result = establish_connection(sd, ctx, is_active);
-    if (result != 0) {
+    if (result == 0) {
         connection_refused(ctx);
-        return;
     }
      /* after the handshake completes, unblock the
      * application with stcp_unblock_application(sd).  you may also use
@@ -214,8 +213,13 @@ int establish_connection(mysocket_t sd, context_t *ctx, bool_t is_active) {
 }
 
 void connection_refused(context_t *ctx) {
+    ctx->done = TRUE;
+    ctx->connection_state = CSTATE_CLOSED;
     errno = ECONNREFUSED;
     free(ctx);
+    fprintf(stderr, "Connection refused\n");
+    // honestly i'm not sure if we need to exit in this case, i don't think so
+    //    exit(-1);
 }
 
 /* generate initial sequence number for an STCP connection */
