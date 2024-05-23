@@ -25,18 +25,28 @@
 #include "transport.h"
 
 
-enum { CSTATE_ESTABLISHED };    /* obviously you should have more states */
+enum {
+    CSTATE_ESTABLISHED,
+    CSTATE_SYN_SENT,
+    CSTATE_SYN_RECEIVED,
+    CSTATE_CLOSED
+};
 
 
 /* this structure is global to a mysocket descriptor */
 typedef struct
 {
     bool_t done;    /* TRUE once connection is closed */
-
     int connection_state;   /* state of the connection (established, etc.) */
     tcp_seq initial_sequence_num;
 
     /* any other connection-wide global variables go here */
+
+    /* Sliding window variables */
+    tcp_seq send_base;      /* Base of the send window */
+    tcp_seq next_seq_num;   /* Next sequence number to be sent */
+    tcp_seq recv_base;      /* Base of the receive window */
+    tcp_seq expected_seq_num; /* Expected sequence number to be received */
 } context_t;
 
 
@@ -44,22 +54,15 @@ static void generate_initial_seq_num(context_t *ctx);
 static void control_loop(mysocket_t sd, context_t *ctx);
 
 
-void cleanup(context_t *ctx);
-
 /* initialise the transport layer, and start the main loop, handling
  * any data from the peer or the application.  this function should not
  * return until the connection is closed.
  */
 
 
-void server_send_syn(mysocket_t sd, context_t *ctx);
-void server_receive_syn(mysocket_t sd, context_t *ctx);
-
-void application_receive_data(mysocket_t sd, context_t *ctx);
-void application_send_data(mysocket_t sd, context_t *ctx);
-
 void transport_init(mysocket_t sd, bool_t is_active)
 {
+
     context_t *ctx;
 
     ctx = (context_t *) calloc(1, sizeof(context_t));
@@ -67,6 +70,11 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
     generate_initial_seq_num(ctx);
 
+    // initialize the connection state
+    ctx->send_base = ctx->initial_sequence_num;
+    ctx->next_seq_num = ctx->initial_sequence_num;
+    ctx->recv_base = 0;
+    ctx->expected_seq_num = 0;
     /* XXX: you should send a SYN packet here if is_active, or wait for one
      * to arrive if !is_active.
      *
@@ -74,11 +82,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
      */
 
     // 3 way TCP handshake
-    if (is_active) {
-        server_send_syn(sd, ctx);
-    } else {
-        server_receive_syn(sd, ctx);
-    }
+
 
      /* after the handshake completes, unblock the
      * application with stcp_unblock_application(sd).  you may also use
@@ -95,43 +99,8 @@ void transport_init(mysocket_t sd, bool_t is_active)
     // TODO: connection teardown
     
     /* do any cleanup here */
-    cleanup(ctx);
-}
-
-void server_send_syn(mysocket_t sd, context_t *ctx) {
-    // create a SYN packet
-
-    if (stcp_network_send(sd, NULL, 0, 0) < 0) {
-        errno = ECONNREFUSED;
-        stcp_unblock_application(sd);
-        cleanup(ctx);
-        fprintf(stderr, "Server failed to send SYN packet\n");
-        exit(-1);
-    }
-}
-
-void server_receive_syn(mysocket_t sd, context_t *ctx) {
-    struct timespec timeout;
-    unsigned int event;
-    clock_gettime(CLOCK_REALTIME, &timeout); // get current time
-    timeout.tv_sec += 1; // add 1 second to the current time
-    event = stcp_wait_for_event(sd, NETWORK_DATA, &timeout);
-    if (event & NETWORK_DATA) {
-        char buf[STCP_MSS];
-        stcp_network_recv(sd, buf, STCP_MSS);
-    } else {
-        errno = ETIMEDOUT;
-        stcp_unblock_application(sd);
-        cleanup(ctx);
-        fprintf(stderr, "Server failed to receive SYN packet\n");
-        exit(-1);
-    }
-}
-
-void cleanup(context_t *ctx) {
     free(ctx);
 }
-
 
 /* generate initial sequence number for an STCP connection */
 static void generate_initial_seq_num(context_t *ctx)
