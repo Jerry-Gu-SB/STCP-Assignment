@@ -55,6 +55,10 @@ static void generate_initial_seq_num(context_t *ctx);
 static void control_loop(mysocket_t sd, context_t *ctx);
 
 /**********************************************************************/
+void connection_refused(context_t *ctx);
+
+int establish_connection(mysocket_t sd, context_t *ctx, bool_t active);
+
 /* our_dprintf
  *
  * Send a formatted message to stdout.
@@ -108,16 +112,36 @@ void transport_init(mysocket_t sd, bool_t is_active)
      */
 
     // 3 way TCP handshake
+
+
+    int result = establish_connection(sd, ctx, is_active);
+    if (result != 0) {
+        connection_refused(ctx);
+        return;
+    }
+     /* after the handshake completes, unblock the
+     * application with stcp_unblock_application(sd).  you may also use
+     * this to communicate an error condition back to the application, e.g.
+     * if connection fails; to do so, just set errno appropriately (e.g. to
+     * ECONNREFUSED, etc.) before calling the function.
+     */
+    ctx->connection_state = CSTATE_ESTABLISHED;
+    stcp_unblock_application(sd);
+
+    control_loop(sd, ctx);
+
+
+    // TODO: connection teardown
+    
+    /* do any cleanup here */
+    free(ctx);
+}
+
+
+int establish_connection(mysocket_t sd, context_t *ctx, bool_t is_active) {
+    int result = 0;
     if (is_active) {
-        our_dprintf("Active open\n");
         // Active open
-        // Send SYN
-//        struct tcphdr *syn_packet = (struct tcphdr *) calloc(1, sizeof(struct tcphdr));
-//        syn_packet->th_flags = TH_SYN;  // syn packet
-//        syn_packet->th_seq = ctx->initial_sequence_num;
-//        syn_packet->th_off = DEFAULT_OFFSET;
-//        syn_packet->th_win = DEFAULT_WINDOW_SIZE;
-//        stcp_network_send(sd, &syn_packet, sizeof(*syn_packet), NULL);
         struct tcphdr syn_packet;
         memset(&syn_packet, 0, sizeof(syn_packet));
         syn_packet.th_flags = TH_SYN;
@@ -148,9 +172,7 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
             ctx->connection_state = CSTATE_ESTABLISHED;
         } else {
-            errno = ECONNREFUSED;
-            free(ctx);
-            return;
+            result = ECONNREFUSED;
         }
     } else {
         // Passive open
@@ -182,31 +204,17 @@ void transport_init(mysocket_t sd, bool_t is_active)
 
                 ctx->connection_state = CSTATE_ESTABLISHED;
             } else {
-                errno = ECONNREFUSED;
-                free(ctx);
-                return;
+                result = ECONNREFUSED;
             }
         } else {
-            errno = ECONNREFUSED;
-            free(ctx);
-            return;
+            result = ECONNREFUSED;
         }
     }
-     /* after the handshake completes, unblock the
-     * application with stcp_unblock_application(sd).  you may also use
-     * this to communicate an error condition back to the application, e.g.
-     * if connection fails; to do so, just set errno appropriately (e.g. to
-     * ECONNREFUSED, etc.) before calling the function.
-     */
-    ctx->connection_state = CSTATE_ESTABLISHED;
-    stcp_unblock_application(sd);
+    return result;
+}
 
-    control_loop(sd, ctx);
-
-
-    // TODO: connection teardown
-    
-    /* do any cleanup here */
+void connection_refused(context_t *ctx) {
+    errno = ECONNREFUSED;
     free(ctx);
 }
 
