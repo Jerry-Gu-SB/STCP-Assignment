@@ -106,7 +106,7 @@ void transport_init(mysocket_t sd, bool_t is_active) {
 
     // 3 way TCP handshake
     int result = establish_connection(sd, ctx, is_active);
-    if (result == 0) {
+    if (result != 0) {
         connection_refused(ctx);
     }
     /* after the handshake completes, unblock the
@@ -299,4 +299,45 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
             /* etc. */
         }
     }
+}
+
+/* Handle the connection teardown process */
+// TODO: fix this, this shit is wrong brother
+void connection_teardown(mysocket_t sd, context_t *ctx) {
+    assert(ctx);
+
+    // Check if the connection is already closed
+    if (ctx->connection_state == CSTATE_CLOSED && ctx->done) {
+        return;
+    }
+
+    // Close the connection if it's still open
+    if (!ctx->done) {
+        struct tcphdr fin_pkt;
+        memset(&fin_pkt, 0, sizeof(fin_pkt));
+        fin_pkt.th_flags = TH_FIN;
+        fin_pkt.th_seq = ctx->next_seq_num;
+        fin_pkt.th_off = DEFAULT_OFFSET;
+        stcp_network_send(sd, &fin_pkt, sizeof(fin_pkt), NULL);
+
+        ctx->connection_state = CSTATE_CLOSED;
+        ctx->done = TRUE;
+    }
+
+    // Wait for ACK of our FIN if it was an active close
+    struct tcphdr recv_pkt;
+    ssize_t recv_len;
+    if (ctx->connection_state == CSTATE_CLOSED) {
+        while (1) {
+            recv_len = stcp_network_recv(sd, &recv_pkt, sizeof(recv_pkt));
+            if (recv_len < 0) {
+                perror("Failed to receive packet");
+                break;
+            }
+            if (recv_pkt.th_flags & TH_ACK) {
+                break;
+            }
+        }
+    }
+
 }
