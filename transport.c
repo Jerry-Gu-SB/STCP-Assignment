@@ -30,7 +30,11 @@ enum {
     CSTATE_ESTABLISHED,
     CSTATE_SYN_SENT,
     CSTATE_SYN_RECEIVED,
-    CSTATE_CLOSED
+    CSTATE_CLOSED,
+    CSTATE_FIN_WAIT_1,
+    CSTATE_FIN_WAIT_2,
+    CSTATE_CLOSE_WAIT,
+    CSTATE_LAST_ACK,
 };
 
 
@@ -51,8 +55,8 @@ typedef struct {
 
 
 static void generate_initial_seq_num(context_t *ctx);
-
 static void control_loop(mysocket_t sd, context_t *ctx);
+static void connection_teardown(mysocket_t sd, context_t *ctx);
 
 /**********************************************************************/
 void connection_refused(context_t *ctx);
@@ -123,7 +127,7 @@ void transport_init(mysocket_t sd, bool_t is_active) {
 
 
     // TODO: connection teardown
-
+    connection_teardown(sd, ctx);
     /* do any cleanup here */
     free(ctx);
 }
@@ -204,22 +208,6 @@ int establish_connection(mysocket_t sd, context_t *ctx, bool_t is_active) {
     return result;
 }
 
-void connection_refused(context_t *ctx) {
-    ctx->done = TRUE;
-    ctx->connection_state = CSTATE_CLOSED;
-    errno = ECONNREFUSED;
-
-    fprintf(stderr, "Connection refused\n");
-    // honestly i'm not sure if we need to exit in this case, i don't think so
-//    free(ctx);
-//    exit(-1);
-}
-
-/* generate initial sequence number for an STCP connection */
-static void generate_initial_seq_num(context_t *ctx) {
-    assert(ctx);
-    ctx->initial_sequence_num = 1;
-}
 
 
 /* control_loop() is the main STCP loop; it repeatedly waits for one of the
@@ -243,8 +231,11 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
         event = stcp_wait_for_event(sd, ANY_EVENT, timeout_ptr);
 
         /* check whether it was the network, app, or a close request */
+        // timeout is not working as i want it i think.
         if (event == TIMEOUT) {
             /* it was a timeout */
+            our_dprintf("Timeout\n");
+            break;
         } else if (event & NETWORK_DATA) {
             /* the application has requested that data be sent */
             /* see stcp_app_recv() */
@@ -302,42 +293,105 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
 }
 
 /* Handle the connection teardown process */
-// TODO: fix this, this shit is wrong brother
+// TODO: connection teardown
 void connection_teardown(mysocket_t sd, context_t *ctx) {
     assert(ctx);
 
-    // Check if the connection is already closed
-    if (ctx->connection_state == CSTATE_CLOSED && ctx->done) {
-        return;
-    }
+    struct tcphdr fin_packet;
+    struct tcphdr ack_packet;
+    struct tcphdr incoming_packet;
 
-    // Close the connection if it's still open
-    if (!ctx->done) {
-        struct tcphdr fin_pkt;
-        memset(&fin_pkt, 0, sizeof(fin_pkt));
-        fin_pkt.th_flags = TH_FIN;
-        fin_pkt.th_seq = ctx->next_seq_num;
-        fin_pkt.th_off = DEFAULT_OFFSET;
-        stcp_network_send(sd, &fin_pkt, sizeof(fin_pkt), NULL);
+    memset(&fin_packet, 0, sizeof(fin_packet));
+    memset(&ack_packet, 0, sizeof(ack_packet));
+    memset(&incoming_packet, 0, sizeof(incoming_packet));
 
-        ctx->connection_state = CSTATE_CLOSED;
-        ctx->done = TRUE;
-    }
+    if(ctx->connection_state == CSTATE_FIN_WAIT_1) {
+        // active close: send the FIN packet
+        fin_packet.th_flags = TH_FIN;
+        fin_packet.th_seq = ctx->next_seq_num;
+        fin_packet.th_off = DEFAULT_OFFSET;
+        fin_packet.th_win = DEFAULT_WINDOW_SIZE;
+        stcp_network_send(sd, &fin_packet, sizeof(fin_packet), NULL);
 
-    // Wait for ACK of our FIN if it was an active close
-    struct tcphdr recv_pkt;
-    ssize_t recv_len;
-    if (ctx->connection_state == CSTATE_CLOSED) {
-        while (1) {
-            recv_len = stcp_network_recv(sd, &recv_pkt, sizeof(recv_pkt));
-            if (recv_len < 0) {
-                perror("Failed to receive packet");
-                break;
+        ctx->next_seq_num++;
+        ctx->connection_state = CSTATE_FIN_WAIT_1;
+
+        while (ctx->connection_state != CSTATE_CLOSED) {
+            unsigned int event = stcp_wait_for_event(sd, NETWORK_DATA, NULL);
+
+            if (event & NETWORK_DATA) {
+                ssize_t recv_length = stcp_network_recv(sd, &incoming_packet, sizeof(incoming_packet));
+                if (recv_length < 0) {
+                    perror("Failed to receive packet");
+                    break;
+
+                } else if (ctx->connection_state == CSTATE_FIN_WAIT_1 && (incoming_packet.th_flags & TH_ACK)) {
+                    ctx->connection_state = CSTATE_FIN_WAIT_2;
+
+                } else if (ctx->connection_state == CSTATE_FIN_WAIT_2 && (incoming_packet.th_flags & TH_FIN)) {
+                    ack_packet.th_flags = TH_ACK;
+                    ack_packet.th_seq = ctx->next_seq_num;
+                    ack_packet.th_ack = incoming_packet.th_seq + 1;
+                    ack_packet.th_off = DEFAULT_OFFSET;
+                    ack_packet.th_win = DEFAULT_WINDOW_SIZE;
+                    stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
+
+                    ctx->connection_state = CSTATE_CLOSED;
+                }
             }
-            if (recv_pkt.th_flags & TH_ACK) {
-                break;
+        }
+
+    } else if (ctx->connection_state == CSTATE_CLOSE_WAIT) {
+        // passive close: received FIN, send ACK
+        ack_packet.th_flags = TH_ACK;
+        ack_packet.th_seq = ctx->next_seq_num;
+        ack_packet.th_ack = incoming_packet.th_seq + 1;
+        ack_packet.th_off = DEFAULT_OFFSET;
+        ack_packet.th_win = DEFAULT_WINDOW_SIZE;
+        stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
+
+        ctx->connection_state = CSTATE_CLOSE_WAIT;
+
+        // now send FIN
+        fin_packet.th_flags = TH_FIN;
+        fin_packet.th_seq = ctx->next_seq_num;
+        fin_packet.th_off = DEFAULT_OFFSET;
+        fin_packet.th_win = DEFAULT_WINDOW_SIZE;
+        stcp_network_send(sd, &fin_packet, sizeof(fin_packet), NULL);
+
+        ctx->next_seq_num++;
+        ctx->connection_state = CSTATE_LAST_ACK;
+
+        while(ctx->connection_state != CSTATE_CLOSED) {
+            unsigned int event = stcp_wait_for_event(sd, NETWORK_DATA, NULL);
+
+            if (event & NETWORK_DATA) {
+                ssize_t recv_length = stcp_network_recv(sd, &incoming_packet, sizeof(incoming_packet));
+                if (recv_length > 0 && incoming_packet.th_flags & TH_ACK) {
+                    ctx->connection_state = CSTATE_CLOSED;
+                }
             }
         }
     }
+    ctx->done = TRUE;
 
+    stcp_unblock_application(sd);
+
+}
+
+void connection_refused(context_t *ctx) {
+    ctx->done = TRUE;
+    ctx->connection_state = CSTATE_CLOSED;
+    errno = ECONNREFUSED;
+
+    fprintf(stderr, "Connection refused\n");
+    // honestly i'm not sure if we need to exit in this case, i don't think so
+//    free(ctx);
+//    exit(-1);
+}
+
+/* generate initial sequence number for an STCP connection */
+static void generate_initial_seq_num(context_t *ctx) {
+    assert(ctx);
+    ctx->initial_sequence_num = 1;
 }
