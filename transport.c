@@ -310,6 +310,13 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
             uint8_t packet[STCP_MSS];
             size_t receive_length = stcp_app_recv(sd, packet, sizeof(packet));
 
+            // Print out the data before sending it
+            our_dprintf("Data to be sent: ");
+            for (size_t i = 0; i < receive_length; ++i) {
+                our_dprintf("%c", packet[i]);
+            }
+            our_dprintf("\n");
+
             struct tcphdr ack_packet;
             ack_packet = getACKPacket(ctx);
             stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
