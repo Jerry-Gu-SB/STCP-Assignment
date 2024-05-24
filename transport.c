@@ -54,7 +54,7 @@ typedef struct {
     tcp_seq expected_seq_num; /* Expected sequence number to be received */
 } context_t;
 
-struct tcphdr getACKPacket(const context_t *ctx, struct tcphdr *incoming_packet);
+struct tcphdr getACKPacket(const context_t *ctx);
 struct tcphdr getFINPacket(const context_t *ctx);
 static void generate_initial_seq_num(context_t *ctx);
 static void control_loop(mysocket_t sd, context_t *ctx);
@@ -223,10 +223,6 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
 //        timeout.tv_sec += DEFAULT_TIMEOUT; // timeout is set here
 //
 //        const struct timespec *timeout_ptr = &timeout;
-
-        /* see stcp_api.h or stcp_api.c for details of this function */
-        event = stcp_wait_for_event(sd, ANY_EVENT, NULL);
-
         /* check whether it was the network, app, or a close request */
         // timeout is not working as i want it i think.
 //        if (event == TIMEOUT) {
@@ -247,6 +243,10 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
 //            stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
 //      this else if is only needed for timeout
 //    } else if
+
+        /* see stcp_api.h or stcp_api.c for details of this function */
+        event = stcp_wait_for_event(sd, ANY_EVENT, NULL);
+
         if (event & NETWORK_DATA) {
             /* the application has requested that data be sent */
             /* see stcp_app_recv() */
@@ -288,11 +288,7 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
                 // Send ACK
                 our_dprintf("Sending ACK for sequence number: %d\n", seq_num);
                 struct tcphdr ack_packet;
-                ack_packet.th_flags = TH_ACK;
-                ack_packet.th_seq = ctx->next_seq_num;
-                ack_packet.th_ack = ctx->expected_seq_num;
-                ack_packet.th_off = DEFAULT_OFFSET;
-                ack_packet.th_win = DEFAULT_WINDOW_SIZE;
+                ack_packet = getACKPacket(ctx);
                 stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
 
                 // handle ack_num
@@ -314,14 +310,9 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
             uint8_t packet[STCP_MSS];
             size_t receive_length = stcp_app_recv(sd, packet, sizeof(packet));
 
-            struct tcphdr send_packet;
-            memset(&send_packet, 0, sizeof(send_packet));
-            send_packet.th_flags = TH_ACK;
-            send_packet.th_seq = ctx->next_seq_num;
-            send_packet.th_ack = ctx->expected_seq_num;
-            send_packet.th_off = DEFAULT_OFFSET;
-            send_packet.th_win = DEFAULT_WINDOW_SIZE;
-            stcp_network_send(sd, &send_packet, sizeof(send_packet), NULL);
+            struct tcphdr ack_packet;
+            ack_packet = getACKPacket(ctx);
+            stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
 
             ctx->next_seq_num += receive_length;
         } else {
@@ -366,7 +357,7 @@ void connection_teardown(mysocket_t sd, context_t *ctx) {
                 || (ctx->connection_state == CSTATE_FIN_WAIT_1 && (incoming_packet.th_flags & TH_FIN))) {
                     our_dprintf("Received FIN\n");
                     stcp_fin_received(sd);
-                    ack_packet = getACKPacket(ctx, &incoming_packet);
+                    ack_packet = getACKPacket(ctx);
                     stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
                     ctx->connection_state = CSTATE_CLOSED;
                 } else {
@@ -379,7 +370,7 @@ void connection_teardown(mysocket_t sd, context_t *ctx) {
         // passive close: received FIN, send ACK
 
         our_dprintf("Passive close\n");
-        ack_packet = getACKPacket(ctx, &incoming_packet);
+        ack_packet = getACKPacket(ctx);
         stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
 
         ctx->connection_state = CSTATE_CLOSE_WAIT;
@@ -422,12 +413,12 @@ static void generate_initial_seq_num(context_t *ctx) {
     ctx->initial_sequence_num = 1;
 }
 
-struct tcphdr getACKPacket(const context_t *ctx, struct tcphdr *incoming_packet) {
+struct tcphdr getACKPacket(const context_t *ctx) {
     struct tcphdr ack_packet;
     memset(&ack_packet, 0, sizeof(ack_packet));
     ack_packet.th_flags = TH_ACK;
     ack_packet.th_seq = ctx->next_seq_num;
-    ack_packet.th_ack = incoming_packet->th_seq + 1;
+    ack_packet.th_ack = ctx->expected_seq_num + 1;
     ack_packet.th_off = DEFAULT_OFFSET;
     ack_packet.th_win = DEFAULT_WINDOW_SIZE;
     return ack_packet;
