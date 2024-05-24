@@ -20,22 +20,23 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <bits/stdint-uintn.h>
 #include "mysock.h"
 #include "stcp_api.h"
 #include "transport.h"
 
 const int DEFAULT_OFFSET = 5;
 const int DEFAULT_WINDOW_SIZE = 3072;
-const int DEFAULT_TIMEOUT = 5;
+//const int DEFAULT_TIMEOUT = 30;
 enum {
-    CSTATE_ESTABLISHED,
     CSTATE_SYN_SENT,
     CSTATE_SYN_RECEIVED,
-    CSTATE_CLOSED,
+    CSTATE_ESTABLISHED,
     CSTATE_FIN_WAIT_1,
     CSTATE_FIN_WAIT_2,
     CSTATE_CLOSE_WAIT,
     CSTATE_LAST_ACK,
+    CSTATE_CLOSED,
 };
 
 /* this structure is global to a mysocket descriptor */
@@ -53,8 +54,8 @@ typedef struct {
     tcp_seq expected_seq_num; /* Expected sequence number to be received */
 } context_t;
 
-struct tcphdr getACKPacket(const context_t *ctx, struct tcphdr *ack_packet, struct tcphdr *incoming_packet);
-struct tcphdr getFINPacket(const context_t *ctx, struct tcphdr *fin_packet);
+struct tcphdr getACKPacket(const context_t *ctx, struct tcphdr *incoming_packet);
+struct tcphdr getFINPacket(const context_t *ctx);
 static void generate_initial_seq_num(context_t *ctx);
 static void control_loop(mysocket_t sd, context_t *ctx);
 static void connection_teardown(mysocket_t sd, context_t *ctx);
@@ -214,24 +215,39 @@ int establish_connection(mysocket_t sd, context_t *ctx, bool_t is_active) {
  */
 static void control_loop(mysocket_t sd, context_t *ctx) {
     assert(ctx);
+//    int timeout_count = 0;
     while (!ctx->done) {
         unsigned int event;
-        struct timespec timeout;
-        clock_gettime(CLOCK_REALTIME, &timeout); // get current time
-        timeout.tv_sec += DEFAULT_TIMEOUT; // add 1 second to the current time
-
-        const struct timespec *timeout_ptr = &timeout;
+//        struct timespec timeout;
+//        clock_gettime(CLOCK_REALTIME, &timeout); // get current time
+//        timeout.tv_sec += DEFAULT_TIMEOUT; // timeout is set here
+//
+//        const struct timespec *timeout_ptr = &timeout;
 
         /* see stcp_api.h or stcp_api.c for details of this function */
-        event = stcp_wait_for_event(sd, ANY_EVENT, timeout_ptr);
+        event = stcp_wait_for_event(sd, ANY_EVENT, NULL);
+
         /* check whether it was the network, app, or a close request */
         // timeout is not working as i want it i think.
-        if (event == TIMEOUT) {
-            /* it was a timeout */
-            our_dprintf("Timeout\n");
-//            break;
-
-        } else if (event & NETWORK_DATA) {
+//        if (event == TIMEOUT) {
+//            /* it was a timeout */
+//            our_dprintf("Timeout\n");
+//            timeout_count++;
+//            if (timeout_count > 5) {
+//                our_dprintf("Timeout count exceeded\n");
+//                break;
+//            }
+//            // retransmit unacknowledged packets
+//            struct tcphdr ack_packet;
+//            ack_packet.th_flags = TH_ACK;
+//            ack_packet.th_seq = ctx->next_seq_num;
+//            ack_packet.th_ack = ctx->expected_seq_num;
+//            ack_packet.th_off = DEFAULT_OFFSET;
+//            ack_packet.th_win = DEFAULT_WINDOW_SIZE;
+//            stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
+//      this else if is only needed for timeout
+//    } else if
+        if (event & NETWORK_DATA) {
             /* the application has requested that data be sent */
             /* see stcp_app_recv() */
             our_dprintf("Network data\n");
@@ -250,6 +266,39 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
                 stcp_fin_received(sd);
                 ctx->connection_state = CSTATE_CLOSE_WAIT;
                 break;
+            } else if (receive_packet.th_flags & TH_ACK) {
+                // Handle ACK Packet
+                our_dprintf("Received ACK packet for ack num: %d\n", receive_packet.th_ack);
+                uint32_t ack_num = receive_packet.th_ack;
+                if (ack_num > ctx->send_base) {
+                    ctx->send_base = ack_num;
+                }
+            } else {
+                // Handle data packet
+                our_dprintf("Received data packet for sequence number\n", receive_packet.th_seq);
+                uint32_t seq_num = receive_packet.th_seq;
+                uint32_t ack_num = receive_packet.th_ack;
+                uint32_t data_length = receive_length - sizeof(receive_packet);
+
+                if (seq_num == ctx->expected_seq_num) {
+                    // Send data to application
+                    stcp_app_send(sd, (void *) &receive_packet + sizeof(receive_packet), data_length);
+                    ctx->expected_seq_num += data_length;
+                }
+                // Send ACK
+                our_dprintf("Sending ACK for sequence number: %d\n", seq_num);
+                struct tcphdr ack_packet;
+                ack_packet.th_flags = TH_ACK;
+                ack_packet.th_seq = ctx->next_seq_num;
+                ack_packet.th_ack = ctx->expected_seq_num;
+                ack_packet.th_off = DEFAULT_OFFSET;
+                ack_packet.th_win = DEFAULT_WINDOW_SIZE;
+                stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
+
+                // handle ack_num
+                if (ack_num > ctx->send_base) {
+                    ctx->send_base = ack_num;
+                }
             }
 
         } else if (event & APP_CLOSE_REQUESTED) {
@@ -262,8 +311,21 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
             our_dprintf("Application data\n");
             /* the network has data for the application */
             /* see stcp_network_recv() */
+            uint8_t packet[STCP_MSS];
+            size_t receive_length = stcp_app_recv(sd, packet, sizeof(packet));
 
-            /* etc. */
+            struct tcphdr send_packet;
+            memset(&send_packet, 0, sizeof(send_packet));
+            send_packet.th_flags = TH_ACK;
+            send_packet.th_seq = ctx->next_seq_num;
+            send_packet.th_ack = ctx->expected_seq_num;
+            send_packet.th_off = DEFAULT_OFFSET;
+            send_packet.th_win = DEFAULT_WINDOW_SIZE;
+            stcp_network_send(sd, &send_packet, sizeof(send_packet), NULL);
+
+            ctx->next_seq_num += receive_length;
+        } else {
+            our_dprintf("Unexpected event\n");
         }
     }
 }
@@ -272,18 +334,17 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
 void connection_teardown(mysocket_t sd, context_t *ctx) {
     assert(ctx);
 
-    struct tcphdr fin_packet;
-    struct tcphdr ack_packet;
-    struct tcphdr incoming_packet;
 
-    memset(&fin_packet, 0, sizeof(fin_packet));
-    memset(&ack_packet, 0, sizeof(ack_packet));
+    struct tcphdr incoming_packet;
+    
     memset(&incoming_packet, 0, sizeof(incoming_packet));
 
+    struct tcphdr ack_packet;
+    struct tcphdr fin_packet;
     if(ctx->connection_state == CSTATE_FIN_WAIT_1) {
         // active close: send the FIN packet
         our_dprintf("Active close\n");
-        fin_packet = getFINPacket(ctx, &fin_packet);
+        fin_packet = getFINPacket(ctx);
         stcp_network_send(sd, &fin_packet, sizeof(fin_packet), NULL);
 
         ctx->next_seq_num++;
@@ -305,7 +366,7 @@ void connection_teardown(mysocket_t sd, context_t *ctx) {
                 || (ctx->connection_state == CSTATE_FIN_WAIT_1 && (incoming_packet.th_flags & TH_FIN))) {
                     our_dprintf("Received FIN\n");
                     stcp_fin_received(sd);
-                    ack_packet = getACKPacket(ctx, &ack_packet, &incoming_packet);
+                    ack_packet = getACKPacket(ctx, &incoming_packet);
                     stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
                     ctx->connection_state = CSTATE_CLOSED;
                 } else {
@@ -318,13 +379,13 @@ void connection_teardown(mysocket_t sd, context_t *ctx) {
         // passive close: received FIN, send ACK
 
         our_dprintf("Passive close\n");
-        ack_packet = getACKPacket(ctx, &ack_packet, &incoming_packet);
+        ack_packet = getACKPacket(ctx, &incoming_packet);
         stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
 
         ctx->connection_state = CSTATE_CLOSE_WAIT;
 
         // now send FIN
-        fin_packet = getFINPacket(ctx, &fin_packet);
+        fin_packet = getFINPacket(ctx);
         stcp_network_send(sd, &fin_packet, sizeof(fin_packet), NULL);
 
         ctx->next_seq_num++;
@@ -361,17 +422,23 @@ static void generate_initial_seq_num(context_t *ctx) {
     ctx->initial_sequence_num = 1;
 }
 
-struct tcphdr getACKPacket(const context_t *ctx, struct tcphdr *ack_packet, struct tcphdr *incoming_packet) {
-    (*ack_packet).th_flags = TH_ACK;
-    (*ack_packet).th_seq = ctx->next_seq_num;
-    (*ack_packet).th_ack = (*incoming_packet).th_seq + 1;
-    (*ack_packet).th_off = DEFAULT_OFFSET;
-    return (*ack_packet);
+struct tcphdr getACKPacket(const context_t *ctx, struct tcphdr *incoming_packet) {
+    struct tcphdr ack_packet;
+    memset(&ack_packet, 0, sizeof(ack_packet));
+    ack_packet.th_flags = TH_ACK;
+    ack_packet.th_seq = ctx->next_seq_num;
+    ack_packet.th_ack = incoming_packet->th_seq + 1;
+    ack_packet.th_off = DEFAULT_OFFSET;
+    ack_packet.th_win = DEFAULT_WINDOW_SIZE;
+    return ack_packet;
 }
 
-struct tcphdr getFINPacket(const context_t *ctx, struct tcphdr *fin_packet) {
-    (*fin_packet).th_flags = TH_FIN;
-    (*fin_packet).th_seq = ctx->next_seq_num;
-    (*fin_packet).th_off = DEFAULT_OFFSET;
-    return (*fin_packet);
+struct tcphdr getFINPacket(const context_t *ctx) {
+    struct tcphdr fin_packet;
+    memset(&fin_packet, 0, sizeof(fin_packet));
+    fin_packet.th_flags = TH_FIN;
+    fin_packet.th_seq = ctx->next_seq_num;
+    fin_packet.th_off = DEFAULT_OFFSET;
+    fin_packet.th_win = DEFAULT_WINDOW_SIZE;
+    return fin_packet;
 }
