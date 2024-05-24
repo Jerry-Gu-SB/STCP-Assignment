@@ -24,8 +24,9 @@
 #include "stcp_api.h"
 #include "transport.h"
 
-int DEFAULT_OFFSET = 5;
-int DEFAULT_WINDOW_SIZE = 3072;
+const int DEFAULT_OFFSET = 5;
+const int DEFAULT_WINDOW_SIZE = 3072;
+const int DEFAULT_TIMEOUT = 5;
 enum {
     CSTATE_ESTABLISHED,
     CSTATE_SYN_SENT,
@@ -48,7 +49,7 @@ typedef struct {
     /* Sliding window variables */
     tcp_seq send_base;      /* Base of the send window */
     tcp_seq next_seq_num;   /* Next sequence number to be sent */
-    tcp_seq recv_base;      /* Base of the receive window */
+    tcp_seq receive_base;      /* Base of the receive window */
     tcp_seq expected_seq_num; /* Expected sequence number to be received */
 } context_t;
 
@@ -102,7 +103,7 @@ void transport_init(mysocket_t sd, bool_t is_active) {
     // initialize the connection state
     ctx->send_base = ctx->initial_sequence_num;
     ctx->next_seq_num = ctx->initial_sequence_num;
-    ctx->recv_base = 0;
+    ctx->receive_base = 0;
     ctx->expected_seq_num = 0;
 
     // 3 way TCP handshake
@@ -119,7 +120,6 @@ void transport_init(mysocket_t sd, bool_t is_active) {
     ctx->connection_state = CSTATE_ESTABLISHED;
     stcp_unblock_application(sd);
 
-    // TODO: control loop
     control_loop(sd, ctx);
 
     connection_teardown(sd, ctx);
@@ -159,8 +159,8 @@ int establish_connection(mysocket_t sd, context_t *ctx, bool_t is_active) {
             ack_packet.th_win = DEFAULT_WINDOW_SIZE;
             stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
 
-            ctx->recv_base = syn_ack_packet.th_seq + 1;
-            ctx->expected_seq_num = ctx->recv_base;
+            ctx->receive_base = syn_ack_packet.th_seq + 1;
+            ctx->expected_seq_num = ctx->receive_base;
 
             ctx->connection_state = CSTATE_ESTABLISHED;
         } else {
@@ -191,8 +191,8 @@ int establish_connection(mysocket_t sd, context_t *ctx, bool_t is_active) {
             stcp_network_recv(sd, &ack_packet, sizeof(ack_packet));
 
             if (ack_packet.th_flags == TH_ACK && ack_packet.th_ack == syn_ack_packet.th_seq + 1) {
-                ctx->recv_base = syn_packet.th_seq + 1;
-                ctx->expected_seq_num = ctx->recv_base;
+                ctx->receive_base = syn_packet.th_seq + 1;
+                ctx->expected_seq_num = ctx->receive_base;
 
                 ctx->connection_state = CSTATE_ESTABLISHED;
             } else {
@@ -218,12 +218,11 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
         unsigned int event;
         struct timespec timeout;
         clock_gettime(CLOCK_REALTIME, &timeout); // get current time
-        timeout.tv_sec += 1; // add 1 second to the current time
+        timeout.tv_sec += DEFAULT_TIMEOUT; // add 1 second to the current time
 
         const struct timespec *timeout_ptr = &timeout;
 
         /* see stcp_api.h or stcp_api.c for details of this function */
-        // TODO: change these somehow
         event = stcp_wait_for_event(sd, ANY_EVENT, timeout_ptr);
         /* check whether it was the network, app, or a close request */
         // timeout is not working as i want it i think.
