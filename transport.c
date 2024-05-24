@@ -37,7 +37,6 @@ enum {
     CSTATE_LAST_ACK,
 };
 
-
 /* this structure is global to a mysocket descriptor */
 typedef struct {
     bool_t done;    /* TRUE once connection is closed */
@@ -53,14 +52,13 @@ typedef struct {
     tcp_seq expected_seq_num; /* Expected sequence number to be received */
 } context_t;
 
-
+struct tcphdr getACKPacket(const context_t *ctx, struct tcphdr *ack_packet, struct tcphdr *incoming_packet);
+struct tcphdr getFINPacket(const context_t *ctx, struct tcphdr *fin_packet);
 static void generate_initial_seq_num(context_t *ctx);
 static void control_loop(mysocket_t sd, context_t *ctx);
 static void connection_teardown(mysocket_t sd, context_t *ctx);
-
 /**********************************************************************/
 void connection_refused(context_t *ctx);
-
 int establish_connection(mysocket_t sd, context_t *ctx, bool_t active);
 
 /* our_dprintf
@@ -92,7 +90,6 @@ void our_dprintf(const char *format, ...) {
  * any data from the peer or the application.  this function should not
  * return until the connection is closed.
  */
-
 void transport_init(mysocket_t sd, bool_t is_active) {
 
     context_t *ctx;
@@ -123,17 +120,14 @@ void transport_init(mysocket_t sd, bool_t is_active) {
     stcp_unblock_application(sd);
 
     // TODO: control loop
-//    control_loop(sd, ctx);
-    ctx->connection_state = CSTATE_FIN_WAIT_1;
-    our_dprintf("Connection established\n");
-    our_dprintf("Connection state: %d\n", ctx->connection_state);
-    // TODO: connection teardown
+    control_loop(sd, ctx);
+
     connection_teardown(sd, ctx);
 
     /* do any cleanup here */
     ctx->done = TRUE;
     free(ctx);
-    our_dprintf("Connection closed\n");
+    our_dprintf("Connection should be closed\n");
 }
 
 
@@ -150,7 +144,6 @@ int establish_connection(mysocket_t sd, context_t *ctx, bool_t is_active) {
         stcp_network_send(sd, &syn_packet, sizeof(syn_packet), NULL);
 
         ctx->connection_state = CSTATE_SYN_SENT;
-
 
         struct tcphdr syn_ack_packet;
         stcp_wait_for_event(sd, NETWORK_DATA, NULL);
@@ -211,8 +204,6 @@ int establish_connection(mysocket_t sd, context_t *ctx, bool_t is_active) {
     }
     return result;
 }
-
-
 
 /* control_loop() is the main STCP loop; it repeatedly waits for one of the
  * following to happen:
@@ -279,7 +270,6 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
 }
 
 /* Handle the connection teardown process */
-// TODO: connection teardown
 void connection_teardown(mysocket_t sd, context_t *ctx) {
     assert(ctx);
 
@@ -294,20 +284,16 @@ void connection_teardown(mysocket_t sd, context_t *ctx) {
     if(ctx->connection_state == CSTATE_FIN_WAIT_1) {
         // active close: send the FIN packet
         our_dprintf("Active close\n");
-        fin_packet.th_flags = TH_FIN;
-        fin_packet.th_seq = ctx->next_seq_num;
-        fin_packet.th_off = DEFAULT_OFFSET;
+        fin_packet = getFINPacket(ctx, &fin_packet);
         stcp_network_send(sd, &fin_packet, sizeof(fin_packet), NULL);
 
         ctx->next_seq_num++;
         ctx->connection_state = CSTATE_FIN_WAIT_1;
 
         while (ctx->connection_state != CSTATE_CLOSED) {
-            our_dprintf("Waiting for event, IS THIS EVEN WORKING??\n");
             unsigned int event = stcp_wait_for_event(sd, NETWORK_DATA, NULL);
 
             if (event & NETWORK_DATA) {
-                our_dprintf("Received network data\n");
                 ssize_t receive_length = stcp_network_recv(sd, &incoming_packet, sizeof(incoming_packet));
                 if (receive_length < 0) {
                     our_dprintf("Failed to receive packet\n");
@@ -320,10 +306,7 @@ void connection_teardown(mysocket_t sd, context_t *ctx) {
                 || (ctx->connection_state == CSTATE_FIN_WAIT_1 && (incoming_packet.th_flags & TH_FIN))) {
                     our_dprintf("Received FIN\n");
                     stcp_fin_received(sd);
-                    ack_packet.th_flags = TH_ACK;
-                    ack_packet.th_seq = ctx->next_seq_num;
-                    ack_packet.th_ack = incoming_packet.th_seq + 1;
-                    ack_packet.th_off = DEFAULT_OFFSET;
+                    ack_packet = getACKPacket(ctx, &ack_packet, &incoming_packet);
                     stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
                     ctx->connection_state = CSTATE_CLOSED;
                 } else {
@@ -336,18 +319,13 @@ void connection_teardown(mysocket_t sd, context_t *ctx) {
         // passive close: received FIN, send ACK
 
         our_dprintf("Passive close\n");
-        ack_packet.th_flags = TH_ACK;
-        ack_packet.th_seq = ctx->next_seq_num;
-        ack_packet.th_ack = incoming_packet.th_seq + 1;
-        ack_packet.th_off = DEFAULT_OFFSET;
+        ack_packet = getACKPacket(ctx, &ack_packet, &incoming_packet);
         stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
 
         ctx->connection_state = CSTATE_CLOSE_WAIT;
 
         // now send FIN
-        fin_packet.th_flags = TH_FIN;
-        fin_packet.th_seq = ctx->next_seq_num;
-        fin_packet.th_off = DEFAULT_OFFSET;
+        fin_packet = getFINPacket(ctx, &fin_packet);
         stcp_network_send(sd, &fin_packet, sizeof(fin_packet), NULL);
 
         ctx->next_seq_num++;
@@ -382,4 +360,19 @@ void connection_refused(context_t *ctx) {
 static void generate_initial_seq_num(context_t *ctx) {
     assert(ctx);
     ctx->initial_sequence_num = 1;
+}
+
+struct tcphdr getACKPacket(const context_t *ctx, struct tcphdr *ack_packet, struct tcphdr *incoming_packet) {
+    (*ack_packet).th_flags = TH_ACK;
+    (*ack_packet).th_seq = ctx->next_seq_num;
+    (*ack_packet).th_ack = (*incoming_packet).th_seq + 1;
+    (*ack_packet).th_off = DEFAULT_OFFSET;
+    return (*ack_packet);
+}
+
+struct tcphdr getFINPacket(const context_t *ctx, struct tcphdr *fin_packet) {
+    (*fin_packet).th_flags = TH_FIN;
+    (*fin_packet).th_seq = ctx->next_seq_num;
+    (*fin_packet).th_off = DEFAULT_OFFSET;
+    return (*fin_packet);
 }
