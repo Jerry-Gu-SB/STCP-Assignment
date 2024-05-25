@@ -215,41 +215,12 @@ int establish_connection(mysocket_t sd, context_t *ctx, bool_t is_active) {
  */
 static void control_loop(mysocket_t sd, context_t *ctx) {
     assert(ctx);
-//    int timeout_count = 0;
     while (!ctx->done) {
         unsigned int event;
-//        struct timespec timeout;
-//        clock_gettime(CLOCK_REALTIME, &timeout); // get current time
-//        timeout.tv_sec += DEFAULT_TIMEOUT; // timeout is set here
-//
-//        const struct timespec *timeout_ptr = &timeout;
-        /* check whether it was the network, app, or a close request */
-        // timeout is not working as i want it i think.
-//        if (event == TIMEOUT) {
-//            /* it was a timeout */
-//            our_dprintf("Timeout\n");
-//            timeout_count++;
-//            if (timeout_count > 5) {
-//                our_dprintf("Timeout count exceeded\n");
-//                break;
-//            }
-//            // retransmit unacknowledged packets
-//            struct tcphdr ack_packet;
-//            ack_packet.th_flags = TH_ACK;
-//            ack_packet.th_seq = ctx->next_seq_num;
-//            ack_packet.th_ack = ctx->expected_seq_num;
-//            ack_packet.th_off = DEFAULT_OFFSET;
-//            ack_packet.th_win = DEFAULT_WINDOW_SIZE;
-//            stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
-//      this else if is only needed for timeout
-//    } else if
-
         /* see stcp_api.h or stcp_api.c for details of this function */
         event = stcp_wait_for_event(sd, ANY_EVENT, NULL);
 
         if (event & NETWORK_DATA) {
-            /* the application has requested that data be sent */
-            /* see stcp_app_recv() */
             our_dprintf("Network data\n");
             struct tcphdr receive_packet;
             ssize_t receive_length = stcp_network_recv(sd, &receive_packet, sizeof(receive_packet));
@@ -274,27 +245,22 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
                     ctx->send_base = ack_num;
                 }
             } else {
-                // Handle data packet
-                our_dprintf("Received data packet for sequence number\n", receive_packet.th_seq);
-                uint32_t seq_num = receive_packet.th_seq;
-                uint32_t ack_num = receive_packet.th_ack;
-                uint32_t data_length = receive_length - sizeof(receive_packet);
-
-                if (seq_num == ctx->expected_seq_num) {
-                    // Send data to application
-                    stcp_app_send(sd, (void *) &receive_packet + sizeof(receive_packet), data_length);
-                    ctx->expected_seq_num += data_length;
-                }
-                // Send ACK
-                our_dprintf("Sending ACK for sequence number: %d\n", seq_num);
+                // send ACK packet
                 struct tcphdr ack_packet;
                 ack_packet = getACKPacket(ctx);
                 stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
+                our_dprintf("ACKed packet with ack num: %d\n", ack_packet.th_ack);
 
-                // handle ack_num
-                if (ack_num > ctx->send_base) {
-                    ctx->send_base = ack_num;
-                }
+                // Strip packet for data
+                char *data = (char *) &receive_packet + sizeof(receive_packet);
+                size_t data_length = receive_length - sizeof(receive_packet);
+
+                // Pass data to application
+                stcp_app_send(sd, data, data_length);
+
+                // Update expected sequence number
+                ctx->expected_seq_num += data_length;
+
             }
 
         } else if (event & APP_CLOSE_REQUESTED) {
@@ -304,24 +270,28 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
             break;
 
         } else if (event & APP_DATA) {
+            // receive app data
             our_dprintf("Application data\n");
-            /* the network has data for the application */
-            /* see stcp_network_recv() */
-            uint8_t packet[STCP_MSS];
-            size_t receive_length = stcp_app_recv(sd, packet, sizeof(packet));
+            char data[STCP_MSS];
+            size_t data_length = stcp_app_recv(sd, data, sizeof(data));
+            our_dprintf("data received: %s\n", data);
 
-            // Print out the data before sending it
-            our_dprintf("Data to be sent: ");
-            for (size_t i = 0; i < receive_length; ++i) {
-                our_dprintf("%c", packet[i]);
-            }
-            our_dprintf("\n");
+            // construct packet with app data
+            struct tcphdr data_packet;
+            memset(&data_packet, 0, sizeof(data_packet));
+            data_packet.th_seq = ctx->next_seq_num;
+            data_packet.th_ack = ctx->expected_seq_num + 1;
+            data_packet.th_off = DEFAULT_OFFSET;
+            data_packet.th_win = DEFAULT_WINDOW_SIZE;
 
-            struct tcphdr ack_packet;
-            ack_packet = getACKPacket(ctx);
-            stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
+            // send packet to the network
+            ssize_t bytes_sent = stcp_network_send(sd, &data_packet, sizeof(struct tcphdr), data, data_length, NULL);
+            our_dprintf("Sent packet with %d bytes\n", bytes_sent);
+            our_dprintf("data size: %d\n, data packet size: %d\n", data_length, sizeof(data_packet));
 
-            ctx->next_seq_num += receive_length;
+            // update next sequence number
+            ctx->next_seq_num += data_length;
+
         } else {
             our_dprintf("Unexpected event\n");
         }
@@ -334,7 +304,7 @@ void connection_teardown(mysocket_t sd, context_t *ctx) {
 
 
     struct tcphdr incoming_packet;
-    
+
     memset(&incoming_packet, 0, sizeof(incoming_packet));
 
     struct tcphdr ack_packet;

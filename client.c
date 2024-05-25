@@ -190,7 +190,7 @@ loop_until_end(int sd)
         /* Parse the response from the server */
         if (NULL == (resp = strrchr(line, ',')))
         {
-            fprintf(stderr, "Malformed response from server.\n");
+            fprintf(stderr, "Malformed response from server 1.\n");
             errcnd = 1;
             break;
         }
@@ -198,7 +198,7 @@ loop_until_end(int sd)
 
         if (NULL == (lenstr = strrchr(line, ',')))
         {
-            fprintf(stderr, "Malformed response from server.\n");
+            fprintf(stderr, "Malformed response from server 2.\n");
             errcnd = 1;
             break;
         }
