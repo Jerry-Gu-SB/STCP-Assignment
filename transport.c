@@ -128,7 +128,7 @@ void transport_init(mysocket_t sd, bool_t is_active) {
     /* do any cleanup here */
     ctx->done = TRUE;
     free(ctx);
-    our_dprintf("Connection should be closed\n");
+//    our_dprintf("Connection should be closed\n");
 }
 
 
@@ -221,7 +221,7 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
         event = stcp_wait_for_event(sd, ANY_EVENT, NULL);
 
         if (event & NETWORK_DATA) {
-            our_dprintf("Network data\n");
+//            our_dprintf("Network data\n");
             char buffer[STCP_MSS + sizeof(struct tcphdr)];
             struct tcphdr receive_packet;
             ssize_t receive_length = stcp_network_recv(sd, buffer, sizeof (buffer));
@@ -236,26 +236,26 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
             // Process received packet...
             if (receive_packet.th_flags & TH_FIN) {
                 // Handle receiving a FIN packet
-                our_dprintf("Received FIN packet\n");
+//                our_dprintf("Received FIN packet\n");
                 stcp_fin_received(sd);
                 ctx->connection_state = CSTATE_CLOSE_WAIT;
                 break;
             } else if (receive_packet.th_flags & TH_ACK) {
                 // Handle ACK Packet
-                our_dprintf("Received ACK packet for ack num: %d\n", receive_packet.th_ack);
+//                our_dprintf("Received ACK packet for ack num: %d\n", receive_packet.th_ack);
                 uint32_t ack_num = receive_packet.th_ack;
                 if (ack_num > ctx->send_base) {
-                    our_dprintf("HEY I SHOULD DO SOMETHING: ACK num: %d", ack_num);
+//                    our_dprintf("HEY I SHOULD DO SOMETHING: ACK num: %d", ack_num);
                     ctx->send_base = ack_num;
-                    our_dprintf(" HERE'S WHAT WAS DONE: send base: %d\n", ctx->send_base);
+//                    our_dprintf(" HERE'S WHAT WAS DONE: send base: %d\n", ctx->send_base);
                 }
             } else {
-                our_dprintf("Data packet\n");
+//                our_dprintf("Data packet\n");
                 // send ACK packet
                 struct tcphdr ack_packet;
                 ack_packet = getACKPacket(ctx);
                 stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
-                our_dprintf("ACKed packet with ack num: %d\n", ack_packet.th_ack);
+//                our_dprintf("ACKed packet with ack num: %d\n", ack_packet.th_ack);
 
                 // Strip packet for data
                 char *data = buffer + sizeof(receive_packet);
@@ -272,24 +272,24 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
 
         } else if (event & APP_CLOSE_REQUESTED) {
             // Handle application close request (active close)
-            our_dprintf("Application close requested\n");
+//            our_dprintf("Application close requested\n");
             ctx->connection_state = CSTATE_FIN_WAIT_1;
             break;
 
         } else if (event & APP_DATA) {
             // receive app data
-            our_dprintf("Application data\n");
+//            our_dprintf("Application data\n");
             char data[STCP_MSS];
 
             // check if other receive window smaller from other person
-            our_dprintf("send base: %d\n", ctx->send_base);
-            our_dprintf("next seq num: %d\n", ctx->next_seq_num);
+//            our_dprintf("send base: %d\n", ctx->send_base);
+//            our_dprintf("next seq num: %d\n", ctx->next_seq_num);
             if (ctx->next_seq_num - ctx->send_base >= (size_t) DEFAULT_WINDOW_SIZE) {
-                our_dprintf("Window full, waiting for ACKs\n");
+//                our_dprintf("Window full, waiting for ACKs\n");
                 continue;
             }
             size_t data_length = stcp_app_recv(sd, data, sizeof(data));
-            our_dprintf("data received: %s data length: %d\n", data, data_length);
+//            our_dprintf("data received: %s data length: %d\n", data, data_length);
 
             // construct packet with app data
             struct tcphdr data_packet;
@@ -301,9 +301,9 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
 
             // send packet to the network
             ssize_t bytes_sent = stcp_network_send(sd, &data_packet, sizeof(struct tcphdr), data, data_length, NULL);
-            our_dprintf("Sent packet with %d bytes\n", bytes_sent);
-            our_dprintf("data size: %d\n, data packet size: %d\n", data_length, sizeof(data_packet));
-            our_dprintf("tcp header size: %d\n", sizeof(struct tcphdr));
+//            our_dprintf("Sent packet with %d bytes\n", bytes_sent);
+//            our_dprintf("data size: %d\n, data packet size: %d\n", data_length, sizeof(data_packet));
+//            our_dprintf("tcp header size: %d\n", sizeof(struct tcphdr));
 
             // update next sequence number
             ctx->next_seq_num += data_length;
@@ -324,7 +324,7 @@ void connection_teardown(mysocket_t sd, context_t *ctx) {
     struct tcphdr fin_packet;
     if(ctx->connection_state == CSTATE_FIN_WAIT_1) {
         // active close: send the FIN packet
-        our_dprintf("Active close\n");
+//        our_dprintf("Active close\n");
         fin_packet = getFINPacket(ctx);
         stcp_network_send(sd, &fin_packet, sizeof(fin_packet), NULL);
 
@@ -337,15 +337,15 @@ void connection_teardown(mysocket_t sd, context_t *ctx) {
             if (event & NETWORK_DATA) {
                 ssize_t receive_length = stcp_network_recv(sd, &incoming_packet, sizeof(incoming_packet));
                 if (receive_length < 0) {
-                    our_dprintf("Failed to receive packet\n");
+//                    our_dprintf("Failed to receive packet\n");
 //                    break;
                 } else if (ctx->connection_state == CSTATE_FIN_WAIT_1 && (incoming_packet.th_flags & TH_ACK)) {
-                    our_dprintf("Received ACK\n");
+//                    our_dprintf("Received ACK\n");
                     ctx->connection_state = CSTATE_FIN_WAIT_2;
 
                 } else if ((ctx->connection_state == CSTATE_FIN_WAIT_2 && (incoming_packet.th_flags & TH_FIN))
                 || (ctx->connection_state == CSTATE_FIN_WAIT_1 && (incoming_packet.th_flags & TH_FIN))) {
-                    our_dprintf("Received FIN\n");
+//                    our_dprintf("Received FIN\n");
                     stcp_fin_received(sd);
                     ack_packet = getACKPacket(ctx);
                     stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
@@ -359,7 +359,7 @@ void connection_teardown(mysocket_t sd, context_t *ctx) {
     } else if (ctx->connection_state == CSTATE_CLOSE_WAIT) {
         // passive close: received FIN, send ACK
 
-        our_dprintf("Passive close\n");
+//        our_dprintf("Passive close\n");
         ack_packet = getACKPacket(ctx);
         stcp_network_send(sd, &ack_packet, sizeof(ack_packet), NULL);
 
@@ -411,7 +411,7 @@ struct tcphdr getACKPacket(const context_t *ctx) {
     ack_packet.th_ack = ctx->expected_seq_num + 1;
     ack_packet.th_off = DEFAULT_OFFSET;
     ack_packet.th_win = DEFAULT_WINDOW_SIZE;
-    our_dprintf("ACKing with expected sequence number: %d\n", ack_packet.th_ack);
+//    our_dprintf("ACKing with expected sequence number: %d\n", ack_packet.th_ack);
     return ack_packet;
 }
 
