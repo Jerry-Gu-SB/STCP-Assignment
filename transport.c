@@ -300,7 +300,7 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
             data_packet.th_win = DEFAULT_WINDOW_SIZE;
 
             // send packet to the network
-            ssize_t bytes_sent = stcp_network_send(sd, &data_packet, sizeof(struct tcphdr), data, data_length, NULL);
+            stcp_network_send(sd, &data_packet, sizeof(struct tcphdr), data, data_length, NULL);
 //            our_dprintf("Sent packet with %d bytes\n", bytes_sent);
 //            our_dprintf("data size: %d\n, data packet size: %d\n", data_length, sizeof(data_packet));
 //            our_dprintf("tcp header size: %d\n", sizeof(struct tcphdr));
@@ -343,6 +343,8 @@ void connection_teardown(mysocket_t sd, context_t *ctx) {
 //                    our_dprintf("Received ACK\n");
                     ctx->connection_state = CSTATE_FIN_WAIT_2;
 
+                    // here would normally branch off into CLOSING or TIME_WAIT, but since we don't need TIME_WAIT
+                    // both of these branches just result in a close.
                 } else if ((ctx->connection_state == CSTATE_FIN_WAIT_2 && (incoming_packet.th_flags & TH_FIN))
                 || (ctx->connection_state == CSTATE_FIN_WAIT_1 && (incoming_packet.th_flags & TH_FIN))) {
 //                    our_dprintf("Received FIN\n");
