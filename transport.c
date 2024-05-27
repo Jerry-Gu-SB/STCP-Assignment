@@ -222,8 +222,11 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
 
         if (event & NETWORK_DATA) {
             our_dprintf("Network data\n");
+            char buffer[STCP_MSS + sizeof(struct tcphdr)];
             struct tcphdr receive_packet;
-            ssize_t receive_length = stcp_network_recv(sd, &receive_packet, sizeof(receive_packet));
+            ssize_t receive_length = stcp_network_recv(sd, buffer, sizeof (buffer));
+            memcpy(&receive_packet, buffer, sizeof(receive_packet));
+
 
             if (receive_length < 0) {
                 perror("Failed to receive packet");
@@ -242,9 +245,12 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
                 our_dprintf("Received ACK packet for ack num: %d\n", receive_packet.th_ack);
                 uint32_t ack_num = receive_packet.th_ack;
                 if (ack_num > ctx->send_base) {
+                    our_dprintf("HEY I SHOULD DO SOMETHING: ACK num: %d", ack_num);
                     ctx->send_base = ack_num;
+                    our_dprintf(" HERE'S WHAT WAS DONE: send base: %d\n", ctx->send_base);
                 }
             } else {
+                our_dprintf("Data packet\n");
                 // send ACK packet
                 struct tcphdr ack_packet;
                 ack_packet = getACKPacket(ctx);
@@ -252,8 +258,9 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
                 our_dprintf("ACKed packet with ack num: %d\n", ack_packet.th_ack);
 
                 // Strip packet for data
-                char *data = (char *) &receive_packet + sizeof(receive_packet);
+                char *data = buffer + sizeof(receive_packet);
                 size_t data_length = receive_length - sizeof(receive_packet);
+//                our_dprintf("data to send: %s\ndata length: %d\n", data, data_length);
 
                 // Pass data to application
                 stcp_app_send(sd, data, data_length);
@@ -273,8 +280,16 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
             // receive app data
             our_dprintf("Application data\n");
             char data[STCP_MSS];
+
+            // check if other receive window smaller from other person
+            our_dprintf("send base: %d\n", ctx->send_base);
+            our_dprintf("next seq num: %d\n", ctx->next_seq_num);
+            if (ctx->next_seq_num - ctx->send_base >= (size_t) DEFAULT_WINDOW_SIZE) {
+                our_dprintf("Window full, waiting for ACKs\n");
+                continue;
+            }
             size_t data_length = stcp_app_recv(sd, data, sizeof(data));
-            our_dprintf("data received: %s\n", data);
+            our_dprintf("data received: %s data length: %d\n", data, data_length);
 
             // construct packet with app data
             struct tcphdr data_packet;
@@ -288,6 +303,7 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
             ssize_t bytes_sent = stcp_network_send(sd, &data_packet, sizeof(struct tcphdr), data, data_length, NULL);
             our_dprintf("Sent packet with %d bytes\n", bytes_sent);
             our_dprintf("data size: %d\n, data packet size: %d\n", data_length, sizeof(data_packet));
+            our_dprintf("tcp header size: %d\n", sizeof(struct tcphdr));
 
             // update next sequence number
             ctx->next_seq_num += data_length;
@@ -302,11 +318,8 @@ static void control_loop(mysocket_t sd, context_t *ctx) {
 void connection_teardown(mysocket_t sd, context_t *ctx) {
     assert(ctx);
 
-
     struct tcphdr incoming_packet;
-
     memset(&incoming_packet, 0, sizeof(incoming_packet));
-
     struct tcphdr ack_packet;
     struct tcphdr fin_packet;
     if(ctx->connection_state == CSTATE_FIN_WAIT_1) {
@@ -398,6 +411,7 @@ struct tcphdr getACKPacket(const context_t *ctx) {
     ack_packet.th_ack = ctx->expected_seq_num + 1;
     ack_packet.th_off = DEFAULT_OFFSET;
     ack_packet.th_win = DEFAULT_WINDOW_SIZE;
+    our_dprintf("ACKing with expected sequence number: %d\n", ack_packet.th_ack);
     return ack_packet;
 }
 
